@@ -7,16 +7,19 @@ format: html
 
 This notebook tries to explain the data quality issues encountered with astronomical light curves using lighthouse light characteristics as an analogy.
 
-```{r}
-library(mvtnorm)
-library(tsibble)
+```{r setup}
+#| message: false
+
 library(tidyr)
 library(ggplot2)
 library(dplyr)
-library(ggnewscale)
+library(mvtnorm)
+library(tsibble)
 
 theme_set(theme_bw())
+```
 
+```{r}
 periodic_kernel <- function(tau, sigma, ell, T) {
   sigma^2 * exp( -2/ell^2*(sin(pi*abs(tau)/T))^2 )
 }
@@ -71,7 +74,10 @@ lc |>
   aes(x = t, y = f, colour = lighthouse) +
   geom_line() +
   facet_wrap(vars(lighthouse), ncol = 1) + 
-  labs(x = "Time (minutes)", y = "Brightness", title = "Lighthouse Characteristics - Continuous", colour = "Lighthouse") +
+  labs(x = "Time (minutes)", 
+       y = "Brightness", 
+       title = "Lighthouse Characteristics - Continuous", 
+       colour = "Lighthouse") +
   theme( strip.text.x = element_blank() )
 ```
 
@@ -79,10 +85,12 @@ lc |>
 lc |> 
   ggplot() +
   aes(x = t, y = f, colour = lighthouse) +
-  #geom_line() +
   geom_point() +
   facet_wrap(vars(lighthouse), ncol = 1) + 
-  labs(x = "Time (minutes)", y = "Brightness", title = "Lighthouse Characteristics - Discretised", colour = "Lighthouse") +
+  labs(x = "Time (minutes)", 
+       y = "Brightness", 
+       title = "Lighthouse Characteristics - Discretised", 
+       colour = "Lighthouse") +
   theme( strip.text.x = element_blank() )
 ```
 
@@ -94,7 +102,10 @@ lc |>
   geom_line(colour = "grey") +
   geom_point() +
   facet_wrap(vars(lighthouse), ncol = 1) + 
-  labs(x = "Time (minutes)", y = "Brightness", title = "Lighthouse Characteristics - Noisy", colour = "Lighthouse") +
+  labs(x = "Time (minutes)", 
+       y = "Brightness",
+       title = "Lighthouse Characteristics - Noisy", 
+       colour = "Lighthouse") +
   theme( strip.text.x = element_blank() )
 ```
 
@@ -107,7 +118,10 @@ lc |>
   geom_line(colour = "grey") +
   geom_point() +
   facet_wrap(vars(lighthouse), ncol = 1) + 
-  labs(x = "Time (minutes)", y = "Brightness", title = "Lighthouse Characteristics - Visible", colour = "Lighthouse") +
+  labs(x = "Time (minutes)", 
+       y = "Brightness", 
+       title = "Lighthouse Characteristics - Visible", 
+       colour = "Lighthouse") +
   theme( strip.text.x = element_blank() )
 ```
 
@@ -119,7 +133,11 @@ lc |>
   geom_point(aes(alpha = !non_detection)) +
   geom_line(data = filter(lc, !non_detection & is_visible), colour = "grey") +
   facet_wrap(vars(lighthouse), ncol = 1) + 
-  labs(x = "Time (minutes)", y = "Brightness", title = "Lighthouse Characteristics - Detected", colour = "Lighthouse", alpha = "Observed") +
+  labs(x = "Time (minutes)", 
+       y = "Brightness", 
+       title = "Lighthouse Characteristics - Detected", 
+       colour = "Lighthouse", 
+       alpha = "Observed") +
   scale_alpha_manual(values = c(0.1, 1)) +
   theme( strip.text.x = element_blank() )
 ```
@@ -131,6 +149,9 @@ lc |>
   geom_line(aes(y = f), colour = "grey", alpha = 0.5, linetype = "dashed") +
   geom_point(data = filter(lc, !non_detection & is_visible)) +
   facet_wrap(vars(lighthouse), ncol = 1) + 
-  labs(x = "Time (minutes)", y = "Brightness", title = "Lighthouse Characteristics - Observed", colour = "Lighthouse") +
+  labs(x = "Time (minutes)",
+       y = "Brightness", 
+       title = "Lighthouse Characteristics - Observed", 
+       colour = "Lighthouse") +
   theme( strip.text.x = element_blank() )
 ```
