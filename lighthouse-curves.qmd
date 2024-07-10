@@ -1,0 +1,136 @@
+---
+title: "Lighthouse Light Curves"
+date: "10 July 2024"
+author: "Shih Ching Fu"
+format: html
+---
+
+This notebook tries to explain the data quality issues encountered with astronomical light curves using lighthouse light characteristics as an analogy.
+
+```{r}
+library(mvtnorm)
+library(tsibble)
+library(tidyr)
+library(ggplot2)
+library(dplyr)
+library(ggnewscale)
+
+theme_set(theme_bw())
+
+periodic_kernel <- function(tau, sigma, ell, T) {
+  sigma^2 * exp( -2/ell^2*(sin(pi*abs(tau)/T))^2 )
+}
+
+tau_matrix <- function(n) {
+  col_index <- matrix(rep(1:n, each = n), nrow = n)
+  row_index <- t(col_index)
+  
+  abs(col_index - row_index)
+}
+
+generate_example_gp <- function(kernel_fn, n_obs, n_series, seed, ...) {
+  set.seed(seed)
+  inputs <- list(...)
+  tau <- tau_matrix(n = n_obs)
+  K <- kernel_fn(tau = tau, ...)
+  X <- 1:n_obs
+  Ys <- rmvnorm(n_series, sigma = K)
+  Ys_ts <- cbind(t = X, as.data.frame(t(Ys))) |> 
+    as_tsibble(index = t)
+  
+  pivot_longer(Ys_ts, cols = -t, names_to = "series", values_to = "f")
+}
+```
+
+```{r}
+N_points <- 100 # Number of measurements
+N_series <- 3   # Number of lighthouses
+y_amp <- 10     # Amplitude hyperparameter value
+y_se <- 2       # SD of added Gaussian noise
+obs_cadence <- 1/4 # frequency of observing
+
+lc <- generate_example_gp(periodic_kernel, 
+                          n_obs = N_points, 
+                          n_series = N_series, 
+                          seed = 0, 
+                          sigma = y_amp, 
+                          ell = 1, 
+                          T = N_points/4) |> 
+  rename(lighthouse = series) |> 
+  arrange(lighthouse, t) |> 
+  mutate(y = f + rnorm(n = N_points*N_series, 0, y_se),
+         is_visible = ifelse(t %% (1/obs_cadence) == 0, TRUE, FALSE), # based on observing cadence
+         non_detection = sample(x = c(TRUE, FALSE), size = N_points*N_series, # non-detections
+                                replace = TRUE, prob = c(0.4, 0.6)))
+head(lc)
+```
+
+```{r}
+lc |> 
+  ggplot() +
+  aes(x = t, y = f, colour = lighthouse) +
+  geom_line() +
+  facet_wrap(vars(lighthouse), ncol = 1) + 
+  labs(x = "Time (minutes)", y = "Brightness", title = "Lighthouse Characteristics - Continuous", colour = "Lighthouse") +
+  theme( strip.text.x = element_blank() )
+```
+
+```{r}
+lc |> 
+  ggplot() +
+  aes(x = t, y = f, colour = lighthouse) +
+  #geom_line() +
+  geom_point() +
+  facet_wrap(vars(lighthouse), ncol = 1) + 
+  labs(x = "Time (minutes)", y = "Brightness", title = "Lighthouse Characteristics - Discretised", colour = "Lighthouse") +
+  theme( strip.text.x = element_blank() )
+```
+
+
+```{r}
+lc |> 
+  ggplot() +
+  aes(x = t, y = y, colour = lighthouse) +
+  geom_line(colour = "grey") +
+  geom_point() +
+  facet_wrap(vars(lighthouse), ncol = 1) + 
+  labs(x = "Time (minutes)", y = "Brightness", title = "Lighthouse Characteristics - Noisy", colour = "Lighthouse") +
+  theme( strip.text.x = element_blank() )
+```
+
+
+```{r}
+lc |> 
+  filter(is_visible) |> 
+  ggplot() +
+  aes(x = t, y = y, colour = lighthouse) +
+  geom_line(colour = "grey") +
+  geom_point() +
+  facet_wrap(vars(lighthouse), ncol = 1) + 
+  labs(x = "Time (minutes)", y = "Brightness", title = "Lighthouse Characteristics - Visible", colour = "Lighthouse") +
+  theme( strip.text.x = element_blank() )
+```
+
+```{r}
+lc |> 
+  filter(is_visible) |> 
+  ggplot() +
+  aes(x = t, y = y, colour = lighthouse) +
+  geom_point(aes(alpha = !non_detection)) +
+  geom_line(data = filter(lc, !non_detection & is_visible), colour = "grey") +
+  facet_wrap(vars(lighthouse), ncol = 1) + 
+  labs(x = "Time (minutes)", y = "Brightness", title = "Lighthouse Characteristics - Detected", colour = "Lighthouse", alpha = "Observed") +
+  scale_alpha_manual(values = c(0.1, 1)) +
+  theme( strip.text.x = element_blank() )
+```
+
+```{r}
+lc |> 
+  ggplot() +
+  aes(x = t, y = y, colour = lighthouse) +
+  geom_line(aes(y = f), colour = "grey", alpha = 0.5, linetype = "dashed") +
+  geom_point(data = filter(lc, !non_detection & is_visible)) +
+  facet_wrap(vars(lighthouse), ncol = 1) + 
+  labs(x = "Time (minutes)", y = "Brightness", title = "Lighthouse Characteristics - Observed", colour = "Lighthouse") +
+  theme( strip.text.x = element_blank() )
+```
