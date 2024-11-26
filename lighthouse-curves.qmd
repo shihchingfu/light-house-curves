@@ -1,13 +1,14 @@
 ---
-title: "Lighthouse Light Curves"
-date: "10 July 2024"
+title: "Light Curve Data Quality Demonstration"
+date: "26 November 2024"
 author: "Shih Ching Fu"
 format: html
 execute: 
   echo: false
+  
 ---
 
-This notebook tries to explain the data quality issues encountered with astronomical light curves using lighthouse light characteristics as an analogy.
+This notebook tries to explain the data quality issues encountered with astronomical light curves using a periodic signal as an example.
 
 ```{r setup}
 #| message: false
@@ -22,6 +23,7 @@ theme_set(theme_bw())
 ```
 
 ```{r}
+# Periodic kernel
 periodic_kernel <- function(tau, sigma, ell, T) {
   sigma^2 * exp( -2/ell^2*(sin(pi*abs(tau)/T))^2 )
 }
@@ -29,11 +31,10 @@ periodic_kernel <- function(tau, sigma, ell, T) {
 tau_matrix <- function(n) {
   col_index <- matrix(rep(1:n, each = n), nrow = n)
   row_index <- t(col_index)
-  
   abs(col_index - row_index)
 }
 
-generate_example_gp <- function(kernel_fn, n_obs, n_series, seed, ...) {
+generate_example_gp <- function(kernel_fn, n_obs, n_series = 1, seed, ...) {
   set.seed(seed)
   inputs <- list(...)
   tau <- tau_matrix(n = n_obs)
@@ -49,153 +50,195 @@ generate_example_gp <- function(kernel_fn, n_obs, n_series, seed, ...) {
 
 ```{r}
 N_points <- 140 # Number of measurements
-N_series <- 3   # Number of lighthouses
 y_amp <- 10     # Amplitude hyperparameter value
-y_se <- 2       # SD of added Gaussian noise
+y_gn_sd <- 2       # SD of added Gaussian (instrumentation) noise
 obs_cadence <- 1/4 # frequency of observing
 
+# No periodicity
 lc1 <- generate_example_gp(periodic_kernel, 
-                          n_obs = N_points, 
-                          n_series = 1, 
-                          seed = 1, 
-                          sigma = y_amp, 
-                          ell = 1, 
-                          T = Inf) |> 
+                           n_obs = N_points, 
+                           seed = 1, 
+                           sigma = y_amp, 
+                           ell = 1, 
+                           T = Inf) |> 
   mutate(series = "A") |> 
-  arrange(t) |> 
-  mutate(y = f + rnorm(n = N_points*1, 0, y_se),
-         is_visible = ifelse(t %% (1/obs_cadence) == 0, TRUE, FALSE), # based on observing cadence
-         non_detection = sample(x = c(TRUE, FALSE), size = N_points*1, # non-detections
-                                replace = TRUE, prob = c(0.4, 0.6)))
-head(lc1)
-```
+  mutate(noise = rnorm(n = N_points, 0, y_gn_sd),
+         y_se = abs(rnorm(N_points, mean = 0, sd = 2)),
+         y = f + noise, # add Gaussian noise
+         is_visible = ifelse(t %% (1/obs_cadence) == 0, TRUE, FALSE), # every ith point
+         non_detection = y_se > 1.5)
 
-
-```{r}
+# Five cycles
 lc2 <- generate_example_gp(periodic_kernel, 
                           n_obs = N_points, 
-                          n_series = 1, 
                           seed = 2, 
                           sigma = y_amp, 
                           ell = 1, 
                           T = N_points/5) |> 
   mutate(series = "B") |> 
-  arrange(t) |> 
-  mutate(y = f + rnorm(n = N_points*1, 0, y_se),
-         is_visible = ifelse(t %% (1/obs_cadence) == 0, TRUE, FALSE), # based on observing cadence
-         non_detection = sample(x = c(TRUE, FALSE), size = N_points*1, # non-detections
-                                replace = TRUE, prob = c(0.4, 0.6)))
-head(lc2)
-```
+  mutate(noise = rnorm(n = N_points, 0, y_gn_sd),
+         y_se = abs(rnorm(N_points, mean = 0, sd = 2)),
+         y = f + noise,
+         is_visible = ifelse(t %% (1/obs_cadence) == 0, TRUE, FALSE),
+         non_detection = y_se > 1.5)
 
-
-```{r}
+# Eleven cycles
 lc3 <- generate_example_gp(periodic_kernel, 
                           n_obs = N_points, 
-                          n_series = 1, 
                           seed = 3, 
                           sigma = y_amp, 
                           ell = 1, 
                           T = N_points/11) |> 
   mutate(series = "C") |> 
   arrange(t) |> 
-  mutate(y = f + rnorm(n = N_points*1, 0, y_se),
-         is_visible = ifelse(t %% (1/obs_cadence) == 0, TRUE, FALSE), # based on observing cadence
-         non_detection = sample(x = c(TRUE, FALSE), size = N_points*1, # non-detections
-                                replace = TRUE, prob = c(0.4, 0.6)))
-head(lc3)
+  mutate(noise = rnorm(n = N_points, 0, y_gn_sd),
+         y_se = abs(rnorm(N_points, mean = 0, sd = 2)),
+         y = f + noise,
+         is_visible = ifelse(t %% (1/obs_cadence) == 0, TRUE, FALSE), 
+         non_detection = y_se > 1.5)
+
+lc <- bind_rows(lc1, lc2, lc3) |> 
+  mutate(series = as.factor(series))
+glimpse(lc)
 ```
 
-```{r}
-lc <- bind_rows(lc1, lc2, lc3)
-lc
-```
-
+The ideal light curve is a smooth curve.
 
 ```{r}
+#| fig-width: 10
+#| fig-height: 8
+
 lc |> 
   ggplot() +
   aes(x = t, y = f, colour = series) +
   geom_line() +
   facet_wrap(vars(series), ncol = 1) + 
-  labs(x = "Time (minutes)", 
+  labs(x = "Time (days)", 
        y = "Brightness", 
-       title = "Lighthouse Characteristics - Continuous", 
-       colour = "Lighthouse") +
+       title = "Clean - Continuous", 
+       colour = "Source") +
   theme( strip.text.x = element_blank() )
 ```
 
+However, in practice we cannot observe to arbitrarily resolution in time so light curves are discretised.
+
 ```{r}
+#| fig-width: 10
+#| fig-height: 8
+
 lc |> 
   ggplot() +
   aes(x = t, y = f, colour = series) +
   geom_point() +
   facet_wrap(vars(series), ncol = 1) + 
-  labs(x = "Time (minutes)", 
+  labs(x = "Time (days)", 
        y = "Brightness", 
-       title = "Lighthouse Characteristics - Discretised", 
-       colour = "Lighthouse") +
+       title = "Clean - Discretised", 
+       colour = "Source") +
   theme( strip.text.x = element_blank() )
 ```
 
+There is inevitably instrumental noise.
 
 ```{r}
+#| fig-width: 10
+#| fig-height: 8
+
 lc |> 
   ggplot() +
   aes(x = t, y = y, colour = series) +
   geom_line(colour = "grey") +
   geom_point() +
   facet_wrap(vars(series), ncol = 1) + 
-  labs(x = "Time (minutes)", 
+  labs(x = "Time (days)", 
        y = "Brightness",
-       title = "Lighthouse Characteristics - Noisy", 
-       colour = "Lighthouse") +
+       title = "Discretised - Noisy", 
+       colour = "Source") +
   theme( strip.text.x = element_blank() )
 ```
 
+Typically in astronomy we also get an estimate of the uncertainty (standard error) in our observed data points.
 
 ```{r}
+#| fig-width: 10
+#| fig-height: 8
+
 lc |> 
-  filter(is_visible) |> 
   ggplot() +
   aes(x = t, y = y, colour = series) +
-  geom_line(colour = "grey") +
+  #geom_line(colour = "grey") +
+  geom_linerange(aes(ymin = y - y_se, ymax = y + y_se), colour = "black", size = 0.7) +
   geom_point() +
   facet_wrap(vars(series), ncol = 1) + 
-  labs(x = "Time (minutes)", 
-       y = "Brightness", 
-       title = "Lighthouse Characteristics - Visible", 
-       colour = "Lighthouse") +
+  labs(x = "Time (days)", 
+       y = "Brightness",
+       title = "Discretised - Noisy", 
+       colour = "Source") +
   theme( strip.text.x = element_blank() )
 ```
 
+Furthermore, the source may be occluded from view for some of the time.
+
 ```{r}
+#| fig-width: 10
+#| fig-height: 8
+
 lc |> 
   filter(is_visible) |> 
   ggplot() +
   aes(x = t, y = y, colour = series) +
-  geom_point(aes(alpha = !non_detection)) +
-  geom_line(data = filter(lc, !non_detection & is_visible), colour = "grey") +
+  #geom_line(colour = "grey") +
+  geom_linerange(aes(ymin = y - y_se, ymax = y + y_se), colour = "black", size = 0.7) +
+  geom_point() +
   facet_wrap(vars(series), ncol = 1) + 
-  labs(x = "Time (minutes)", 
+  labs(x = "Time (days)", 
        y = "Brightness", 
-       title = "Lighthouse Characteristics - Detected", 
-       colour = "Lighthouse", 
-       alpha = "Observed") +
-  scale_alpha_manual(values = c(0.1, 1)) +
+       title = "Noisy - Occluded", 
+       colour = "Source") +
   theme( strip.text.x = element_blank() )
 ```
 
+The observing conditions on a particular day might mean a source is below the detection limit of the instrument that day.
+
 ```{r}
+#| fig-width: 10
+#| fig-height: 8
+
+lc |> 
+  filter(is_visible) |> 
+  ggplot() +
+  aes(x = t, y = y, colour = series) +
+  geom_linerange(data = filter(lc, !non_detection & is_visible), 
+                 aes(ymin = y - y_se, ymax = y + y_se), colour = "black", size = 0.7) +
+  geom_point(aes(alpha = !non_detection)) +
+  #geom_line(data = filter(lc, !non_detection & is_visible), colour = "grey") +
+  facet_wrap(vars(series), ncol = 1) + 
+  labs(x = "Time (days)", 
+       y = "Brightness", 
+       title = "Visible - Non-detected", 
+       colour = "Source", 
+       alpha = "Detected") +
+  scale_alpha_manual(values = c(0.3, 1)) +
+  theme( strip.text.x = element_blank() )
+```
+
+The dataset you actually receive can look very different from the original!
+
+```{r}
+#| fig-width: 10
+#| fig-height: 8
+
 lc |> 
   ggplot() +
   aes(x = t, y = y, colour = series) +
   geom_line(aes(y = f), colour = "grey", alpha = 0.5, linetype = "dashed") +
+  geom_linerange(data = filter(lc, !non_detection & is_visible), 
+                 aes(ymin = y - y_se, ymax = y + y_se), colour = "black", size = 0.7) +
   geom_point(data = filter(lc, !non_detection & is_visible)) +
   facet_wrap(vars(series), ncol = 1) + 
-  labs(x = "Time (minutes)",
+  labs(x = "Time (days)",
        y = "Brightness", 
-       title = "Lighthouse Characteristics - Observed", 
-       colour = "Lighthouse") +
+       title = "Observed", 
+       colour = "Source") +
   theme( strip.text.x = element_blank() )
 ```
