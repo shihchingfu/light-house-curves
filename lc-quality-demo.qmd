@@ -2,10 +2,12 @@
 title: "Light Curve Data Quality Demonstration"
 date: "26 November 2024"
 author: "Shih Ching Fu"
-format: html
+format: 
+  html:
+    self-contained: true
 execute: 
   echo: false
-  
+  warning: false
 ---
 
 This notebook tries to explain the data quality issues encountered with astronomical light curves using a periodic signal as an example.
@@ -66,7 +68,7 @@ lc1 <- generate_example_gp(periodic_kernel,
          y_se = abs(rnorm(N_points, mean = 0, sd = 2)),
          y = f + noise, # add Gaussian noise
          is_visible = ifelse(t %% (1/obs_cadence) == 0, TRUE, FALSE), # every ith point
-         non_detection = y_se > 1.5)
+         non_detection = y_se > 2)
 
 # Five cycles
 lc2 <- generate_example_gp(periodic_kernel, 
@@ -77,10 +79,10 @@ lc2 <- generate_example_gp(periodic_kernel,
                           T = N_points/5) |> 
   mutate(series = "B") |> 
   mutate(noise = rnorm(n = N_points, 0, y_gn_sd),
-         y_se = abs(rnorm(N_points, mean = 0, sd = 2)),
+         y_se = abs(rnorm(N_points, mean = 0, sd = 4)),
          y = f + noise,
          is_visible = ifelse(t %% (1/obs_cadence) == 0, TRUE, FALSE),
-         non_detection = y_se > 1.5)
+         non_detection = y_se > 2)
 
 # Eleven cycles
 lc3 <- generate_example_gp(periodic_kernel, 
@@ -92,10 +94,10 @@ lc3 <- generate_example_gp(periodic_kernel,
   mutate(series = "C") |> 
   arrange(t) |> 
   mutate(noise = rnorm(n = N_points, 0, y_gn_sd),
-         y_se = abs(rnorm(N_points, mean = 0, sd = 2)),
+         y_se = abs(rnorm(N_points, mean = 0, sd = 4)),
          y = f + noise,
          is_visible = ifelse(t %% (1/obs_cadence) == 0, TRUE, FALSE), 
-         non_detection = y_se > 1.5)
+         non_detection = y_se > 2)
 
 lc <- bind_rows(lc1, lc2, lc3) |> 
   mutate(series = as.factor(series))
